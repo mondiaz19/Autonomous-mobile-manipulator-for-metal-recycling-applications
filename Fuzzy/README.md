@@ -210,7 +210,7 @@ Example for stopping the vehicle:
 
 ```bash
 git clone <REPOSITORY-URL>
-cd FuzzyChido
+cd Fuzzy
 ```
 
 ## Debug Output
