@@ -20,8 +20,8 @@ The project includes an automatic controller that processes position and velocit
 ## Repository Structure
 
 ```text
-FuzzyChido/
-├── FuzzyChido.ino       # Main program with the fuzzy controller
+Fuzzy/
+├── Fuzzy.ino       # Main program with the fuzzy controller
 ├── bluetooth.cpp        # Bluetooth command reading and processing
 ├── bluetooth.h          # Bluetooth module declarations
 ├── control.cpp          # Motor PWM and direction control
@@ -266,12 +266,4 @@ Before modifying the rules, record the system response and perform low-power tes
 
 Initially test the system with the wheels lifted and with a current-limited power supply. Keep a physical emergency-stop switch available and avoid working close to the wheels while the controller is running.
 
-## Authors and License
 
-Add the authors' names, institution, and selected license for the project.
-
-```text
-Author: <NAME>
-Institution: <INSTITUTION>
-License: <LICENSE>
-```
