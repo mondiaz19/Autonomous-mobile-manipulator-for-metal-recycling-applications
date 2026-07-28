@@ -1,0 +1,177 @@
+%% prepareAugmentedDataset.m
+%
+% PURPOSE
+%   Consolidates the dataset-preparation pipeline into a single
+%   documented script.
+%
+%   Images were manually labeled using MATLAB's Image Labeler app
+%   (as described in the manuscript's labeling procedure). During
+%   labeling, source images are read from wherever the user originally
+%   stored them, as referenced inside the app's groundTruth object --
+%   this location is user-/project-dependent and is not fixed by this
+%   script. Once labeling is complete, the resulting ground-truth boxes
+%   are exported to YOLO .txt format and the dataset is split into
+%   train/val/test. THAT split/exported dataset -- not the original
+%   labeling source folder -- is the expected INPUT to this script,
+%   organized as:
+%
+%       datasets/images/train, datasets/images/val, datasets/images/test
+%       datasets/labels/train, datasets/labels/val, datasets/labels/test
+%       datasets/data.yaml
+%
+%   Each label line is: class x_center y_center width height
+%   (all normalized to [0,1] relative to image size), e.g.:
+%       0 0.593250 0.288375 0.085500 0.178750
+%
+% WHAT THIS SCRIPT DOES
+%   1. For the TRAIN and VAL splits only, it generates N augmented
+%      copies of every image (random flip, rotation, scale, and color
+%      jitter), correctly re-normalizing the bounding boxes for each
+%      augmented copy.
+%   2. The TEST split is left completely untouched, so evaluation
+%      metrics (Precision/Recall/F1/mAP, see manuscript Section X and
+%      our response to Reviewer Comment 3.1) remain computed on clean,
+%      unaugmented data.
+%   3. Optionally resizes images to a fixed input size, if
+%      RESIZE_TO_FIXED_SIZE is enabled below.
+%
+% DATASET LICENSE / CITATION
+%   If this dataset is released publicly (see Reviewer Comment 3.6),
+%   remember to include a LICENSE / README note requesting citation of
+%   the associated paper. This script does not handle that -- it is a
+%   documentation/licensing step, not a code step.
+%
+% USAGE
+%   Edit the CONFIGURATION block below, then run the script from the
+%   folder that contains the "datasets" directory.
+
+%% ------------------------- CONFIGURATION -------------------------
+datasetRoot   = "datasets";      % root folder containing images/ and labels/
+splitsToAugment = ["train", "val"];  % test is intentionally excluded
+numAugmentsPerImage = 5;         % number of augmented copies generated per image
+targetSize    = [640 480 3];     % [rows cols channels], used only if resizing
+RESIZE_TO_FIXED_SIZE = false;    % set true to also resize/rescale originals
+
+rng(42);  % keep augmentation reproducible, consistent with the rest of the pipeline
+
+%% ------------------------- MAIN LOOP -------------------------
+for s = 1:numel(splitsToAugment)
+    split = splitsToAugment(s);
+    imgDir = fullfile(datasetRoot, "images", split);
+    lblDir = fullfile(datasetRoot, "labels", split);
+
+    imgFiles = dir(fullfile(imgDir, "*.jpg"));
+    fprintf("Processing split '%s': %d images\n", split, numel(imgFiles));
+
+    for k = 1:numel(imgFiles)
+        [~, baseName, ~] = fileparts(imgFiles(k).name);
+        imgPath = fullfile(imgDir, imgFiles(k).name);
+        lblPath = fullfile(lblDir, baseName + ".txt");
+
+        if ~isfile(lblPath)
+            warning("No label file found for %s, skipping.", imgFiles(k).name);
+            continue
+        end
+
+        I = imread(imgPath);
+        [classIDs, bboxesPixel] = readYoloLabels(lblPath, size(I));
+
+        % Optional: resize/rescale the ORIGINAL image+boxes
+        if RESIZE_TO_FIXED_SIZE
+            [I, bboxesPixel] = preprocessSample(I, bboxesPixel, targetSize);
+            imwrite(I, imgPath);  % overwrite resized original
+            writeYoloLabels(lblPath, classIDs, bboxesPixel, size(I));
+        end
+
+        % Generate augmented copies
+        for a = 1:numAugmentsPerImage
+            [augI, augBboxesPixel, augClassIDs] = augmentSample(I, bboxesPixel, classIDs);
+
+            augImgName = baseName + "-aug" + num2str(a) + ".jpg";
+            augLblName = baseName + "-aug" + num2str(a) + ".txt";
+
+            imwrite(augI, fullfile(imgDir, augImgName), "jpg");
+            writeYoloLabels(fullfile(lblDir, augLblName), augClassIDs, augBboxesPixel, size(augI));
+        end
+
+        if mod(k, 50) == 0
+            fprintf("  %d/%d images done\n", k, numel(imgFiles));
+        end
+    end
+end
+
+fprintf("Augmentation complete.\n");
+
+
+%% ===================== HELPER FUNCTIONS =====================
+
+function [classIDs, bboxesPixel] = readYoloLabels(lblPath, imgSize)
+    % Reads a YOLO-format .txt file (class xc yc w h, all normalized) --
+    % exported from MATLAB's Image Labeler ground-truth boxes -- and
+    % converts them to pixel-space [x y w h] (top-left corner form),
+    % which is the format expected by bboxwarp during augmentation.
+    raw = readmatrix(lblPath);
+    if isempty(raw)
+        classIDs = [];
+        bboxesPixel = zeros(0,4);
+        return
+    end
+    classIDs = raw(:,1);
+    xc = raw(:,2) * imgSize(2);
+    yc = raw(:,3) * imgSize(1);
+    w  = raw(:,4) * imgSize(2);
+    h  = raw(:,5) * imgSize(1);
+    bboxesPixel = [xc - w/2, yc - h/2, w, h];  % [x y w h], top-left corner
+end
+
+function writeYoloLabels(lblPath, classIDs, bboxesPixel, imgSize)
+    % Inverse of readYoloLabels: converts pixel [x y w h] boxes back to
+    % normalized YOLO format and writes them to disk.
+    fileID = fopen(lblPath, 'w');
+    for i = 1:size(bboxesPixel,1)
+        x = bboxesPixel(i,1); y = bboxesPixel(i,2);
+        w = bboxesPixel(i,3); h = bboxesPixel(i,4);
+        xc = (x + w/2) / imgSize(2);
+        yc = (y + h/2) / imgSize(1);
+        wn = w / imgSize(2);
+        hn = h / imgSize(1);
+        fprintf(fileID, '%d %f %f %f %f\n', classIDs(i), xc, yc, wn, hn);
+    end
+    fclose(fileID);
+end
+
+function [aug_I, aug_bboxes, aug_labels] = augmentSample(I, bboxes, labels)
+    % Applies random horizontal flip, rotation (10-80 deg), scale
+    % (1x-1.25x), and HSV color jitter. Boxes that fall (mostly)
+    % outside the frame after warping are dropped if their remaining
+    % overlap is below 0.25 IoU.
+    sz = size(I);
+
+    if numel(sz) == 3 && sz(3) == 3
+        I = jitterColorHSV(I, contrast=0.0, Hue=0.1, Saturation=0.2, Brightness=0.2);
+    end
+
+    tform = randomAffine2d(XReflection=true, Rotation=[10,80], Scale=[1,1.25]);
+    rout = affineOutputView(sz, tform, BoundsStyle="centerOutput");
+    aug_I = imwarp(I, tform, OutputView=rout);
+
+    [aug_bboxes, indices] = bboxwarp(bboxes, tform, rout, OverlapThreshold=0.25);
+    aug_labels = labels(indices);
+
+    % If every box got warped out of frame, fall back to the original
+    % (unaugmented) sample rather than saving an image with no labels.
+    if isempty(aug_labels)
+        aug_I = I;
+        aug_bboxes = bboxes;
+        aug_labels = labels;
+    end
+end
+
+function [pp_I, pp_bboxes] = preprocessSample(I, bboxes, targetSize)
+    % Resizes the image to targetSize and rescales pixel-space boxes
+    % to match.
+    imgSize = size(I);
+    pp_I = im2single(imresize(I, targetSize(1:2)));
+    scale = targetSize(1:2) ./ imgSize(1:2);
+    pp_bboxes = bboxresize(bboxes, scale);
+end
