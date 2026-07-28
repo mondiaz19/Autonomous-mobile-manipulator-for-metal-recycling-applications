@@ -15,10 +15,10 @@ sets.
 
 1. **Image collection** — raw images are stored wherever the user originally
    saved them; this location is project-dependent and is *not* fixed by any
-   script in this repository.
+   script in this repository. Dataset localization is in the following link: https://tecmx-my.sharepoint.com/:u:/g/personal/mariad_tec_mx/IQCPmPBNoFYIQL-JmxVLOk0hASBpaH7WKl6AoOt3ycFOI_o?e=eIF0dj 
 2. **Manual labeling** — images were manually labeled using MATLAB's
    **Image Labeler** app, producing a `groundTruth` object per the
-   manuscript's labeling procedure (Section X).
+   manuscript's labeling procedure (Section X). 
 3. **Export + split** — the `groundTruth` bounding boxes are exported to
    normalized YOLO `.txt` format and the dataset is split into
    train/validation/test (60/10/30%, fixed random seed) prior to
