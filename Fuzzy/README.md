@@ -251,17 +251,6 @@ Before modifying the rules, record the system response and perform low-power tes
 - The current configuration reduces the front-motor PWM to one fifth of the rear-motor PWM.
 - The fuzzy parameters and thresholds must be calibrated for the actual platform geometry, mass, motors, and operating surface.
 
-## Possible Improvements
-
-- Validate the format and range of received messages.
-- Explicitly limit the duty cycle using `constrain()`.
-- Add a fail-safe stop mechanism for communication loss.
-- Normalize the fuzzy rules using the sum of the activation degrees.
-- Separate serial reading, fuzzy inference, and actuation into independent modules.
-- Add electrical diagrams and photographs of the prototype.
-- Add rotational control to the fuzzy algorithm.
-- Include a software license and testing documentation.
-
 ## Safety
 
 Initially test the system with the wheels lifted and with a current-limited power supply. Keep a physical emergency-stop switch available and avoid working close to the wheels while the controller is running.
