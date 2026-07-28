@@ -1,4 +1,4 @@
-# FuzzyChido
+# Fuzzy
 
 Motion controller for a four-motor mobile platform based on **fuzzy logic**, Bluetooth serial communication, and pulse-width modulation (PWM).
 
